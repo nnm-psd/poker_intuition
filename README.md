@@ -26,3 +26,9 @@ Open http://localhost:8000. The page needs HTTP; opening `index.html` as a file 
    (about 2.5 minutes per flop; unchanged flops are reused), and lists them in `data/index.json`.
 
 `python equity.py` runs the equity self-checks.
+
+## Keep solving
+
+`.venv/Scripts/python keep_solving.py` solves the next unsolved flop, rebuilds the data, commits and pushes it, then
+moves on. After the hand-picked `FLOPS` it works through all 1,755 distinct flops, weighted by how often each is dealt.
+Create a file named `STOP` in this folder to stop after the current flop.

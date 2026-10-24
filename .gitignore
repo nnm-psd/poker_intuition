@@ -2,5 +2,6 @@
 __pycache__/
 # TexasSolver binary: download it, don't redistribute it (see README)
 vendor/
-# raw solver dumps (~700 KB each); data/spots.json is built from them
+# raw solver dumps (~700 KB each); data/flops/ is built from them
 solves/
+STOP
