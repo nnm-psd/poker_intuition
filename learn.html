@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poker Basics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="prose">
+  <header><h1><a href="index.html">Poker intuition</a></h1><nav><a href="index.html">Take the test</a></nav></header>
+
+  <h2 class="lead">What you need to know before the test</h2>
+  <p>The test deals you real decisions from No-Limit Texas Hold'em and compares your instincts with a solver.
+    This page covers the rules, the hand rankings and the handful of ideas the scores are built on.</p>
+  <ul class="toc">
+    <li><a href="#rules">How a hand is played</a></li>
+    <li><a href="#rankings">Hand rankings</a></li>
+    <li><a href="#positions">Positions and blinds</a></li>
+    <li><a href="#equity">Equity, ranges and pot odds</a></li>
+    <li><a href="#strategy">Why you bet</a></li>
+    <li><a href="#styles">Playing styles</a></li>
+    <li><a href="#solver">What a solver does</a></li>
+    <li><a href="#test">How the test scores you</a></li>
+    <li><a href="#sources">Sources</a></li>
+  </ul>
+
+  <section id="rules">
+    <h2>How a hand is played</h2>
+    <p>Each player gets two private cards (hole cards). Five shared cards are dealt face up in the middle. Your hand is the best
+      five-card combination from your two cards and the five shared ones. You may even use all five shared cards and none of yours,
+      which is called playing the board.</p>
+    <ol>
+      <li><strong>Preflop.</strong> Two forced bets start the pot: the player directly left of the button posts the small blind
+        (usually half a big blind) and the next player posts the big blind. The first player left of the big blind acts first.
+        The big blind's forced bet counts as a bet, so when the action comes back, the big blind can still raise.</li>
+      <li><strong>Flop.</strong> Three shared cards are dealt at once, followed by a round of betting.</li>
+      <li><strong>Turn.</strong> A fourth shared card, then betting.</li>
+      <li><strong>River.</strong> The fifth and last shared card, then the final betting round.</li>
+      <li><strong>Showdown.</strong> If two or more players are left, the best hand wins the pot. The last player to bet or raise
+        shows first; if everyone checked, the first player to act shows first. Cards speak for themselves:
+        what you hold counts, not what you announce.</li>
+    </ol>
+    <p>From the flop on, action starts with the first player still in the hand to the left of the button.
+      On your turn you can <strong>fold</strong> (give up the hand), <strong>check</strong> (pass, if nobody has bet),
+      <strong>call</strong> (match a bet), <strong>bet</strong>, or <strong>raise</strong>.
+      A raise must be at least as big as the previous bet or raise in that round, unless you're going all-in.</p>
+    <p>In <strong>no-limit</strong>, a bet is limited only by the chips in front of you, and there's no cap on the number of raises.
+      Putting in everything is going <strong>all-in</strong>. You win a pot either at showdown or when everyone else folds,
+      which is why bluffing works.</p>
+    <p>Amounts here are in big blinds (bb). A 100bb stack is the standard starting depth in cash games.</p>
+  </section>
+
+  <section id="rankings">
+    <h2>Hand rankings</h2>
+    <p>From strongest to weakest. When two hands share a category, the higher cards win, and the remaining high cards
+      (kickers) decide from there, but only cards inside the best five count. Suits never break a tie: identical hands split the pot,
+      and an odd chip goes to the first tied hand clockwise from the button. An ace can be high or low (A-2-3-4-5), but a straight can't wrap around (Q-K-A-2-3 isn't one).</p>
+    <ol class="ranks">
+      <li><span class="cards" data-c="9h 8h 7h 6h 5h"></span><span><strong>Straight flush</strong>Five in a row, same suit. The ace-high one is a royal flush.</span></li>
+      <li><span class="cards" data-c="Qs Qh Qd Qc 4s"></span><span><strong>Four of a kind</strong>Four cards of one rank.</span></li>
+      <li><span class="cards" data-c="Ks Kd Kc 7h 7s"></span><span><strong>Full house</strong>Three of one rank plus a pair.</span></li>
+      <li><span class="cards" data-c="Ad Jd 8d 5d 3d"></span><span><strong>Flush</strong>Five of the same suit.</span></li>
+      <li><span class="cards" data-c="Ts 9d 8c 7h 6s"></span><span><strong>Straight</strong>Five in a row, mixed suits.</span></li>
+      <li><span class="cards" data-c="7s 7d 7c Kh 2s"></span><span><strong>Three of a kind</strong>A <em>set</em> uses a pocket pair; <em>trips</em> uses one card plus a board pair.</span></li>
+      <li><span class="cards" data-c="As Ad 8c 8h Kd"></span><span><strong>Two pair</strong>Two different pairs.</span></li>
+      <li><span class="cards" data-c="Js Jh Ad 9c 4s"></span><span><strong>One pair</strong>Two cards of one rank.</span></li>
+      <li><span class="cards" data-c="Ah Qd 9s 6c 3h"></span><span><strong>High card</strong>Nothing made: the highest card plays.</span></li>
+    </ol>
+    <p>On the flop you'll also hear names for how your hand relates to the board: <strong>top pair</strong> pairs the highest board card,
+      an <strong>overpair</strong> is a pocket pair above every board card, and a <strong>draw</strong> is a hand one card away
+      from a straight or flush. An open-ended straight draw has eight outs; a gutshot has four; a flush draw has nine.</p>
+  </section>
+
+  <section id="positions">
+    <h2>Positions and blinds</h2>
+    <p>The dealer button moves one seat clockwise after each hand, so everyone takes turns at the best seat. After the flop, the player on the button acts last, and acting last is a real
+      advantage: you see what everyone else did before you decide. Being <strong>in position</strong> means you act after your opponent;
+      <strong>out of position</strong> means you act first.</p>
+    <p>In a six-player game the seats, in order of acting preflop, are under the gun, hijack, cutoff, button, small blind and big blind.
+      Later seats can play more hands because fewer players are left to act behind them.</p>
+    <p class="note">Every hand in the test comes from one common spot: the button raises to 2.5bb, the small blind folds and the
+      big blind calls. The pot on the flop is 5.5bb, and the big blind is out of position.</p>
+  </section>
+
+  <section id="equity">
+    <h2>Equity, ranges and pot odds</h2>
+    <dl class="terms">
+      <dt>Range</dt>
+      <dd>You never know your opponent's exact cards, so you think about every hand they could hold given what they've done.
+        A big blind who just called a raise has a wide, capped range: most premium hands would have re-raised.</dd>
+      <dt>Equity</dt>
+      <dd>Your share of the pot if all the remaining cards were dealt with no more betting. It's measured against a range, not one hand.
+        On K♠7♦2♣, pocket sevens (a set) have about 97% equity against the big blind's range; 5♥4♥ has about 20%.</dd>
+      <dt>Pot odds</dt>
+      <dd>The equity a call needs to break even: the amount to call divided by the pot after you call.
+        Calling 1.8bb into a 7.3bb pot needs 1.8 / (7.3 + 1.8), about 20%.</dd>
+      <dt>Expected value (EV)</dt>
+      <dd>What a decision wins or loses on average if you made it thousands of times. Good poker is choosing the highest-EV play,
+        not winning the current hand.</dd>
+      <dt>Equity realisation</dt>
+      <dd>Raw equity overstates what some hands actually win. A weak hand out of position often gets bet off it before showdown,
+        so it realises less than its equity. Draws and hands in position tend to realise more.</dd>
+    </dl>
+  </section>
+
+  <section id="strategy">
+    <h2>Why you bet</h2>
+    <p>Every bet needs a reason. There are four:</p>
+    <dl class="terms">
+      <dt>Value</dt><dd>You're likely ahead, and worse hands will call.</dd>
+      <dt>Bluff</dt><dd>Your hand rarely wins at showdown, but a bet can make better hands fold.</dd>
+      <dt>Semi-bluff</dt><dd>A bluff with a draw: you can win now, and you can still improve when called.</dd>
+      <dt>Protection</dt><dd>You're ahead but vulnerable, so you charge overcards and draws instead of giving them a free card.</dd>
+    </dl>
+    <p>Medium-strength hands usually check: a bet folds out the worse hands and gets called by the better ones.
+      Strong players also <strong>balance</strong> their bets with a mix of value hands and bluffs,
+      so opponents can't read their hand from the action.</p>
+  </section>
+
+  <section id="styles">
+    <h2>Playing styles</h2>
+    <p>Two questions describe most players: how many hands they play (tight or loose) and how they play them (passive, mostly calling,
+      or aggressive, mostly betting and raising).</p>
+    <table class="styles">
+      <thead><tr><th></th><th scope="col">Passive</th><th scope="col">Aggressive</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Tight</th>
+          <td><strong>Nit.</strong> Few hands, rarely bets without a monster. Steal their blinds; believe their big bets.</td>
+          <td><strong>Tight-aggressive (TAG).</strong> Few hands, played hard. The solid default most players aim for.</td></tr>
+        <tr><th scope="row">Loose</th>
+          <td><strong>Calling station.</strong> Many hands, calls too much. Value-bet more and bluff less.</td>
+          <td><strong>Loose-aggressive (LAG).</strong> Many hands, lots of pressure. Tough when skilled; a maniac when not.</td></tr>
+      </tbody>
+    </table>
+    <p>Adjusting to a player's leaks is <strong>exploitative</strong> play. The opposite is <strong>game-theory optimal (GTO)</strong>
+      play, which doesn't depend on who you're facing. That's what a solver computes.</p>
+  </section>
+
+  <section id="solver">
+    <h2>What a solver does</h2>
+    <p>A solver takes a fixed situation: both players' ranges, the board, the pot, the stacks and the bet sizes allowed.
+      It plays that situation against itself over and over, using an algorithm from a family called counterfactual regret
+      minimisation, and each pass adjusts both players' strategies until neither can gain by changing. That balance point is a
+      <strong>Nash equilibrium</strong>, the strategy people call GTO.</p>
+    <ul>
+      <li><strong>It answers for every hand.</strong> The output is how often to check, bet, call, raise or fold with each possible holding.</li>
+      <li><strong>It mixes.</strong> Some hands bet 50% of the time and check the rest. Mixing keeps both lines balanced and hard to exploit,
+        so either choice can be correct.</li>
+      <li><strong>It's unexploitable, not maximally profitable.</strong> Against a calling station, the exploitative play beats GTO.
+        GTO is the baseline you deviate from.</li>
+      <li><strong>It only knows what it's given.</strong> The solves here allow two flop bet sizes and simplified turns and rivers.
+        A commercial solution with more sizes can differ.</li>
+      <li><strong>It's approximate.</strong> Exploitability measures how far a solution is from perfect. The solves in this test stop at
+        about 1.5% of the pot; commercial tools usually aim lower.</li>
+    </ul>
+  </section>
+
+  <section id="test">
+    <h2>How the test scores you</h2>
+    <p>Each hand asks for two things against a running clock: your equity estimate, then your action.</p>
+    <dl class="terms">
+      <dt>Solver match</dt><dd>100% when you pick an action the solver takes as often as its main play. Mixed spots give partial credit.</dd>
+      <dt>Equity error</dt><dd>How many percentage points your estimate was off from your exact equity against the opponent's range.</dd>
+      <dt>Median time</dt><dd>How long you take to decide. Intuition is the ability to be right fast, so the bar turns red after 15 seconds.</dd>
+    </dl>
+    <p><a class="button primary" href="index.html">Take the test</a></p>
+  </section>
+
+  <section id="sources">
+    <h2>Sources</h2>
+    <p>The rules above follow <a href="https://www.pagat.com/docs/RobsPkrRulesHome.pdf">Robert's Rules of Poker</a> by Bob Ciaffone,
+      a widely used cardroom rulebook: its hold'em, button and blinds, betting, showdown, ties and no-limit sections, and its glossary
+      definitions of each hand. They're summarised here, not quoted. The hand order and the no-wraparound straight are the standard
+      convention, which the rulebook assumes rather than spells out. Tournaments add their own procedures, set by the
+      <a href="https://www.pokertda.com/">Poker Tournament Directors Association</a>. Individual cardrooms can vary, so check the house rules where you play.</p>
+    <p>The strategy and solver sections describe common practice rather than rules. Their numbers come from this site's own solves
+      with <a href="https://github.com/bupticybee/TexasSolver">TexasSolver</a>.</p>
+  </section>
+</main>
+<script>
+const SUITS = { s: "♠", h: "♥", d: "♦", c: "♣" };
+const SUIT_NAMES = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" };
+const RANK_NAMES = { A: "Ace", K: "King", Q: "Queen", J: "Jack", T: "Ten" };
+const card = c => `<div class="card ${c[1]}" role="img" aria-label="${RANK_NAMES[c[0]] || c[0]} of ${SUIT_NAMES[c[1]]}">` +
+  `<span>${c[0] === "T" ? "10" : c[0]}<small>${SUITS[c[1]]}</small></span></div>`;
+document.querySelectorAll(".cards").forEach(el => (el.innerHTML = el.dataset.c.split(" ").map(card).join("")));
+</script>
+</body>
+</html>

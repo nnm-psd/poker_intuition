@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poker Intuition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header><h1>Poker intuition</h1><nav><span id="progress"></span><a href="learn.html">Learn the basics</a></nav></header>
+  <div id="app"><p class="situation">Loading hands…</p></div>
+</main>
+<script>
+const HANDS = 10, SLOW = 15; // hands per test, seconds before the timer turns late
+const SUITS = { s: "♠", h: "♥", d: "♦", c: "♣" };
+const SUIT_NAMES = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" };
+const RANK_NAMES = { A: "Ace", K: "King", Q: "Queen", J: "Jack", T: "Ten" };
+const app = document.getElementById("app");
+let data, results = [], cur;
+
+const card = c => `<div class="card ${c[1]}" role="img" aria-label="${RANK_NAMES[c[0]] || c[0]} of ${SUIT_NAMES[c[1]]}">` +
+  `<span>${c[0] === "T" ? "10" : c[0]}<small>${SUITS[c[1]]}</small></span></div>`;
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const pct = x => `${Math.round(x * 100)}%`;
+
+function weighted(combos) {
+  const entries = Object.entries(combos);
+  let r = Math.random() * entries.reduce((s, [, v]) => s + v.w, 0);
+  for (const e of entries) if ((r -= e[1].w) <= 0) return e;
+  return entries.at(-1);
+}
+
+function deal() {
+  const flop = pick(data.flops), spot = pick(flop.spots);
+  const [combo, info] = weighted(spot.combos);
+  cur = { flop, spot, combo, info, t0: null, guess: null };
+  document.getElementById("progress").textContent = `Hand ${results.length + 1} of ${HANDS}`;
+  const you = spot.hero === "BB" ? "the big blind" : "the button";
+  const history = spot.history.map(h => h.replace(`${spot.hero} checks`, "you check"));
+  const story = history.length ? history.join(", then ").replace(/^./, c => c.toUpperCase()) + "." : "You act first.";
+  app.innerHTML = `
+    <div class="board deal">${flop.board.map(card).join("")}</div>
+    <p class="situation">Pot <strong>${spot.pot_bb}bb</strong>. You're on ${you}. ${story}</p>
+    <div class="hand deal">${[combo.slice(0, 2), combo.slice(2)].map(card).join("")}</div>
+    <div class="timer" id="timer"><i></i></div>
+    <div class="panel">
+      <label for="eq">Your equity against their range</label>
+      <div class="eq-row"><input id="eq" type="range" min="0" max="100" value="50"><output id="eqv">–</output></div>
+      <div class="actions">${spot.actions.map((a, i) => `<button data-i="${i}" disabled>${a}</button>`).join("")}</div>
+      <p class="hint" id="hint">Set your equity first, then choose an action. The clock is running.</p>
+    </div>`;
+  const eq = document.getElementById("eq"), eqv = document.getElementById("eqv");
+  eq.addEventListener("input", () => {
+    cur.guess = eq.value / 100;
+    eqv.textContent = `${eq.value}%`;
+    app.querySelectorAll(".actions button").forEach(b => (b.disabled = false));
+    document.getElementById("hint").textContent = "Choose an action.";
+  });
+  app.querySelectorAll(".actions button").forEach(b => b.addEventListener("click", () => act(+b.dataset.i)));
+  cur.t0 = performance.now();
+  tick();
+}
+
+function tick() {
+  const el = document.getElementById("timer");
+  if (!el || cur.done) return;
+  const s = (performance.now() - cur.t0) / 1000;
+  el.firstElementChild.style.transform = `scaleX(${Math.max(0, 1 - s / SLOW)})`;
+  el.classList.toggle("late", s > SLOW);
+  requestAnimationFrame(tick);
+}
+
+// Rule-based explanation: hand, its place in your range, the price, and the solver's reason.
+function insight(i) {
+  const { spot, info } = cur, f = info.f, acts = spot.actions;
+  const main = f.indexOf(Math.max(...f));
+  const range = Object.values(spot.combos), total = range.reduce((s, c) => s + c.w, 0);
+  const below = range.reduce((s, c) => s + (c.eq < info.eq ? c.w : 0), 0) / total;
+  const place = below >= 0.5 ? `the top ${Math.max(1, Math.round((1 - below) * 100))}%` : `the bottom ${Math.max(1, Math.round(below * 100))}%`;
+  const out = [`${info.cat}, with ${pct(info.eq)} equity. That's ${place} of your range here.`];
+
+  const bet = (spot.history.at(-1) || "").match(/bets ([\d.]+)bb/);
+  const need = bet ? +bet[1] / (spot.pot_bb + +bet[1]) : null;
+  if (need) out.push(`Calling ${bet[1]}bb into ${spot.pot_bb}bb needs ${pct(need)} equity.`);
+
+  const a = acts[main], aggressive = /^(Bet|Raise|All-in)/.test(a);
+  const verb = a.startsWith("Raise") || (a === "All-in" && need) ? "raising" : "betting";
+  const drawing = /draw|gutshot/i.test(info.cat);
+  let why;
+  if (aggressive && below >= 0.8) why = `The solver is ${verb} for value: plenty of worse hands will call.`;
+  else if (aggressive && below >= 0.5 && !drawing) why = `The solver is ${verb} for protection: the hand is ahead now but vulnerable, so it charges overcards and draws instead of giving them a free card.`;
+  else if (aggressive && drawing) why = `The solver is ${verb} as a semi-bluff: it can win the pot now, and the draw is a backup when called.`;
+  else if (aggressive) why = `The solver is ${verb} as a bluff: this hand rarely wins at showdown, so it wins by making better hands fold.`;
+  else if (a === "Check" && spot.id === "root") why = "Out of position against the preflop raiser's stronger range, the big blind checks almost everything.";
+  else if (a === "Check" && below >= 0.85) why = "The solver checks this strong hand to keep its checking range protected. The opponent will often bet for you.";
+  else if (a === "Check") why = "The solver checks to reach showdown cheaply: a bet would fold out worse hands and get called by better ones.";
+  else if (a === "Call") why = "The solver calls: the equity covers the price, but the hand isn't strong enough to raise for value.";
+  else if (info.eq < need) why = "The solver folds: there isn't enough equity for the price.";
+  else why = "The solver folds despite enough raw equity: this hand won't realize it, because it is often pushed off by later bets.";
+  if (Math.max(...f) < 0.7) {
+    const second = f.indexOf(Math.max(...f.filter((_, j) => j !== main)));
+    why += ` It's a mixed spot, though: ${acts[main]} ${pct(f[main])} of the time, ${acts[second]} ${pct(f[second])}.`;
+  }
+  out.push(why);
+
+  if (f[i] < 0.05) out.push(`${acts[i]} is a play the solver almost never makes here.`);
+  else if (i !== main && f[i] >= 0.25) out.push(`${acts[i]} is part of the solver's mix, so your choice is fine.`);
+  const err = cur.guess - info.eq;
+  if (Math.abs(err) >= 0.15) out.push(`You ${err > 0 ? "over" : "under"}estimated your equity by ${Math.round(Math.abs(err) * 100)} points.`);
+  return out.join(" ");
+}
+
+function act(i) {
+  cur.done = true;
+  const f = cur.info.f, best = Math.max(...f);
+  const r = {
+    time: (performance.now() - cur.t0) / 1000,
+    match: f[i] / best, // full credit for any action the solver plays as often as its main line
+    eqErr: Math.abs(cur.guess - cur.info.eq),
+    // kept for the hand-by-hand review
+    board: cur.flop.board, combo: cur.combo, you: cur.spot.actions[i],
+    solver: cur.spot.actions[f.indexOf(best)], solverPct: best, eq: cur.info.eq, guess: cur.guess,
+  };
+  results.push(r);
+  const last = results.length === HANDS;
+  app.querySelector(".panel").innerHTML = `
+    <label>The solver plays this hand</label>
+    <ul class="mix">${cur.spot.actions.map((a, j) => `
+      <li class="${j === i ? "yours" : ""}"><span>${a}${j === i ? " (you)" : ""}</span>
+        <span class="bar"><i style="width:${f[j] * 100}%"></i></span><span>${pct(f[j])}</span></li>`).join("")}
+    </ul>
+    <p class="insight">${insight(i)}</p>
+    <dl class="facts">
+      <div><dt>Solver match</dt><dd>${pct(r.match)}</dd></div>
+      <div><dt>Equity</dt><dd>${pct(cur.info.eq)}</dd><dt>you said ${pct(cur.guess)}</dt></div>
+      <div><dt>Time</dt><dd>${r.time.toFixed(1)}s</dd></div>
+    </dl>
+    <button class="primary" id="next">${last ? "See my results" : "Next hand"}</button>`;
+  const next = document.getElementById("next");
+  next.addEventListener("click", last ? summary : deal);
+  next.focus();
+}
+
+// Sessions live in this browser only (localStorage); the page works without them.
+const STORE = "poker-intuition.sessions";
+function loadSessions() {
+  try { return JSON.parse(localStorage.getItem(STORE)) || []; } catch { return []; }
+}
+function saveSessions(list) {
+  try { localStorage.setItem(STORE, JSON.stringify(list.slice(-50))); } catch { /* private mode: not saved */ }
+}
+
+const inline = c => `<span class="t-${c[1]}">${c[0] === "T" ? "10" : c[0]}${SUITS[c[1]]}</span>`;
+const when = t => new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+function scores(s) {
+  return `<dl class="facts">
+    <div><dt>Solver match</dt><dd>${pct(s.match)}</dd></div>
+    <div><dt>Equity error</dt><dd>${Math.round(s.eqErr * 100)} pts</dd></div>
+    <div><dt>Median time</dt><dd>${s.median.toFixed(1)}s</dd></div>
+  </dl>`;
+}
+
+function review(hands) {
+  return `<div class="review"><table>
+    <thead><tr><th scope="col">Hand</th><th scope="col">You</th><th scope="col">Solver's main play</th>
+      <th scope="col">Match</th><th scope="col">Equity</th><th scope="col">Time</th></tr></thead>
+    <tbody>${hands.map(h => `<tr>
+      <td>${h.board.map(inline).join(" ")}<br>${[h.combo.slice(0, 2), h.combo.slice(2)].map(inline).join(" ")}</td>
+      <td>${h.you}</td><td>${h.solver} (${pct(h.solverPct)})</td><td>${pct(h.match)}</td>
+      <td>${pct(h.eq)}<br><span class="muted">said ${pct(h.guess)}</span></td><td>${h.time.toFixed(1)}s</td></tr>`).join("")}
+    </tbody></table></div>`;
+}
+
+// One sentence per score: how this session moved against the previous one.
+function compare(now, prev) {
+  const pts = x => `${Math.abs(Math.round(x * 100))} points`;
+  const dm = now.match - prev.match, de = now.eqErr - prev.eqErr, dt = now.median - prev.median;
+  return [
+    Math.round(dm * 100) ? `Solver match ${dm > 0 ? "up" : "down"} ${pts(dm)}` : "Solver match unchanged",
+    Math.round(de * 100) ? `equity error ${de < 0 ? "down" : "up"} ${pts(de)}` : "equity error unchanged",
+    Math.abs(dt) >= 0.1 ? `${Math.abs(dt).toFixed(1)}s ${dt < 0 ? "faster" : "slower"}` : "same speed",
+  ].join(", ") + " compared with your last session.";
+}
+
+function summary() {
+  const avg = k => results.reduce((s, r) => s + r[k], 0) / results.length;
+  const times = results.map(r => r.time).sort((a, b) => a - b);
+  const session = {
+    at: Date.now(), match: avg("match"), eqErr: avg("eqErr"),
+    median: (times[(times.length - 1) >> 1] + times[times.length >> 1]) / 2, hands: results,
+  };
+  const past = loadSessions();
+  saveSessions([...past, session]);
+  document.getElementById("progress").textContent = "Done";
+  app.innerHTML = `
+    <section class="result">
+      <h2>Your intuition over ${HANDS} hands</h2>
+      ${scores(session)}
+      ${past.length ? `<p class="insight">${compare(session, past.at(-1))}</p>` : ""}
+      <p>Solver match is 100% when you always pick a play the solver uses at least as often as its main line.
+        Mixed spots give partial credit. Equity error is how far your estimates were from the true equity, on average.
+        To understand the ideas behind these scores, read <a href="learn.html#equity">equity</a> and <a href="learn.html#solver">what a solver does</a>.</p>
+      <h3>Hand by hand</h3>
+      ${review(results)}
+      <div class="row"><button class="primary" id="again">Play another ${HANDS}</button><button id="home">See all sessions</button></div>
+    </section>`;
+  document.getElementById("again").addEventListener("click", start);
+  document.getElementById("home").addEventListener("click", home);
+}
+
+function start() { results = []; deal(); }
+
+function home() {
+  const list = loadSessions().reverse();
+  document.getElementById("progress").textContent = "";
+  const avg = k => list.reduce((s, x) => s + x[k], 0) / list.length;
+  app.innerHTML = `
+    <section class="result">
+      <h2>How good are your poker instincts?</h2>
+      <p>You'll get ${HANDS} real flop decisions from a 100bb cash game. For each one, estimate your equity, then act before the clock runs out.
+        A solver grades every choice, and your sessions are saved in this browser so you can track your progress.</p>
+      <div class="row"><button class="primary" id="go">Start a ${HANDS}-hand session</button></div>
+      ${list.length ? `
+        <h3>Your sessions</h3>
+        <p class="muted">Average over ${list.length} session${list.length > 1 ? "s" : ""}</p>
+        ${scores({ match: avg("match"), eqErr: avg("eqErr"), median: avg("median") })}
+        <ul class="sessions">${list.map(s => `
+          <li><details><summary><span>${when(s.at)}</span><span>${pct(s.match)} match</span>
+            <span>${Math.round(s.eqErr * 100)} pts off</span><span>${s.median.toFixed(1)}s</span></summary>
+            ${review(s.hands)}</details></li>`).join("")}
+        </ul>
+        <button id="clear">Clear my history</button>` : ""}
+    </section>`;
+  document.getElementById("go").addEventListener("click", start);
+  document.getElementById("clear")?.addEventListener("click", () => {
+    if (confirm("Delete all saved sessions from this browser?")) { saveSessions([]); home(); }
+  });
+}
+
+fetch("data/spots.json").then(r => r.json()).then(d => { data = d; home(); })
+  .catch(() => (app.innerHTML = `<p class="situation">Couldn't load data/spots.json. Serve this folder over HTTP, for example with <code>python -m http.server</code>.</p>`));
+</script>
+</body>
+</html>
