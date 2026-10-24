@@ -15,7 +15,9 @@ OUT = ROOT / "solves"
 # ponytail: hand-picked texture sample; upgrade path = all 1755 iso flops once solve time allows
 FLOPS = ["Ks,7d,2c", "Ah,8d,3c", "Qs,Jh,2h", "9s,8s,6d", "Td,Tc,4h", "7h,5h,2d",
          "As,Ks,4d", "Ad,7c,7h", "Kh,Qd,Th", "Jc,8d,4s", "Ts,9h,4c", "8h,7h,6h", "Qd,8d,3d",
-         "6c,4d,2s", "5s,5d,2h", "Jh,Td,9c", "Ac,5d,4h", "Kd,Kc,8s", "9d,6c,3h", "Qh,7s,5c"]
+         "6c,4d,2s", "5s,5d,2h", "Jh,Td,9c", "Ac,5d,4h", "Kd,Kc,8s", "9d,6c,3h", "Qh,7s,5c",
+         "Ah,Kd,Qc", "Kc,Jh,4d", "Js,9s,7d", "Td,6d,3h", "Ac,Jd,3s", "8c,5d,3h", "9h,9c,5d",
+         "7c,6d,5s", "As,9d,6c", "Kh,8h,2s"]
 
 SIZES = """\
 set_bet_sizes oop,flop,bet,33

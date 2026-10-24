@@ -15,16 +15,18 @@
   <div id="app"><p class="situation">Loading hands…</p></div>
 </main>
 <script>
-const HANDS = 10, SLOW = 15; // hands per test, seconds before the timer turns late
+const SLOW = 15; // seconds before the timer turns late
 const SUITS = { s: "♠", h: "♥", d: "♦", c: "♣" };
 const SUIT_NAMES = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" };
 const RANK_NAMES = { A: "Ace", K: "King", Q: "Queen", J: "Jack", T: "Ten" };
 const app = document.getElementById("app");
-let data, results = [], cur;
+const flopCache = new Map();
+let index, results = [], plan = [], cur;
 
 const card = c => `<div class="card ${c[1]}" role="img" aria-label="${RANK_NAMES[c[0]] || c[0]} of ${SUIT_NAMES[c[1]]}">` +
   `<span>${c[0] === "T" ? "10" : c[0]}<small>${SUITS[c[1]]}</small></span></div>`;
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const shuffle = arr => arr.map(x => [Math.random(), x]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
 const pct = x => `${Math.round(x * 100)}%`;
 
 function weighted(combos) {
@@ -34,36 +36,85 @@ function weighted(combos) {
   return entries.at(-1);
 }
 
+// Flop files store each combo as [weight, equity, hand-name index, frequencies...]; expand once on load.
+async function loadFlop(entry) {
+  if (!flopCache.has(entry.file)) {
+    const flop = await (await fetch(`data/${entry.file}`)).json();
+    for (const spot of flop.spots)
+      for (const [c, [w, eq, cat, ...f]] of Object.entries(spot.combos)) spot.combos[c] = { w, eq, cat: flop.cats[cat], f };
+    flopCache.set(entry.file, flop);
+  }
+  return flopCache.get(entry.file);
+}
+
+// Spread a session evenly: no flop repeats until every flop is used, and each hand prefers a situation not seen yet.
+async function makePlan(n) {
+  let order = [];
+  while (order.length < n) order = order.concat(shuffle(index.flops));
+  const flops = await Promise.all(order.slice(0, n).map(loadFlop));
+  const seen = new Set();
+  return flops.map(flop => {
+    let fresh = flop.spots.filter(s => !seen.has(s.situation));
+    if (!fresh.length) { seen.clear(); fresh = flop.spots; }
+    const spot = pick(fresh);
+    seen.add(spot.situation);
+    return { flop, spot };
+  });
+}
+
+// Relabelling suits consistently doesn't change the strategy, so every hand can look fresh.
+function suitMap() {
+  const to = shuffle([..."shdc"]), m = {};
+  [..."shdc"].forEach((s, i) => (m[s] = to[i]));
+  return c => c[0] + m[c[1]];
+}
+
 function deal() {
-  const flop = pick(data.flops), spot = pick(flop.spots);
+  const { flop, spot } = plan[results.length];
   const [combo, info] = weighted(spot.combos);
-  cur = { flop, spot, combo, info, t0: null, guess: null };
-  document.getElementById("progress").textContent = `Hand ${results.length + 1} of ${HANDS}`;
+  const relabel = suitMap();
+  const board = flop.board.map(relabel), hole = [combo.slice(0, 2), combo.slice(2)].map(relabel);
+  cur = { flop, spot, info, board, hole, t0: null, guess: null };
+  document.getElementById("progress").textContent = `Hand ${results.length + 1} of ${plan.length}`;
   const you = spot.hero === "BB" ? "the big blind" : "the button";
-  const history = spot.history.map(h => h.replace(`${spot.hero} checks`, "you check"));
-  const story = history.length ? history.join(", then ").replace(/^./, c => c.toUpperCase()) + "." : "You act first.";
+  const story = spot.history.length ? spot.history.join(", then ").replace(/^./, c => c.toUpperCase()) + "." : "You act first.";
   app.innerHTML = `
-    <div class="board deal">${flop.board.map(card).join("")}</div>
+    <div class="board deal">${board.map(card).join("")}</div>
     <p class="situation">Pot <strong>${spot.pot_bb}bb</strong>. You're on ${you}. ${story}</p>
-    <div class="hand deal">${[combo.slice(0, 2), combo.slice(2)].map(card).join("")}</div>
+    <div class="hand deal">${hole.map(card).join("")}</div>
     <div class="timer" id="timer"><i></i></div>
     <div class="panel">
-      <label for="eq">Your equity against their range</label>
-      <div class="eq-row"><input id="eq" type="range" min="0" max="100" value="50"><output id="eqv">–</output></div>
-      <div class="actions">${spot.actions.map((a, i) => `<button data-i="${i}" disabled>${a}</button>`).join("")}</div>
-      <p class="hint" id="hint">Set your equity first, then choose an action. The clock is running.</p>
+      <label for="eqn">Your equity against their range</label>
+      <div class="eq-row">
+        <input id="eq" type="range" min="0" max="100" value="50" aria-label="Equity slider">
+        <input id="eqn" type="number" min="0" max="100" inputmode="numeric" placeholder="–" aria-describedby="hint"><span class="unit">%</span>
+      </div>
+      <div class="actions">${spot.actions.map((a, i) => `<button data-i="${i}" disabled><kbd>${i + 1}</kbd>${a}</button>`).join("")}</div>
+      <p class="hint" id="hint">Type your equity and press Enter, or drag the slider. Then choose an action with 1–${spot.actions.length}. The clock is running.</p>
     </div>`;
-  const eq = document.getElementById("eq"), eqv = document.getElementById("eqv");
-  eq.addEventListener("input", () => {
-    cur.guess = eq.value / 100;
-    eqv.textContent = `${eq.value}%`;
+  const slider = document.getElementById("eq"), num = document.getElementById("eqn");
+  const setGuess = v => {
+    cur.guess = Math.min(100, Math.max(0, v)) / 100;
     app.querySelectorAll(".actions button").forEach(b => (b.disabled = false));
-    document.getElementById("hint").textContent = "Choose an action.";
+    document.getElementById("hint").textContent = `Choose an action: click it or press 1–${spot.actions.length}.`;
+  };
+  slider.addEventListener("input", () => { num.value = slider.value; setGuess(+slider.value); });
+  num.addEventListener("input", () => { if (num.value !== "") { slider.value = num.value; setGuess(+num.value); } });
+  num.addEventListener("keydown", e => {
+    if (e.key === "Enter" && num.value !== "") { e.preventDefault(); num.blur(); app.querySelector(".actions button").focus(); }
   });
   app.querySelectorAll(".actions button").forEach(b => b.addEventListener("click", () => act(+b.dataset.i)));
+  if (matchMedia("(pointer: fine)").matches) num.focus(); // skip on touch: it would pop up the keyboard
   cur.t0 = performance.now();
   tick();
 }
+
+// 1–n picks an action once the equity is in (not while typing it).
+document.addEventListener("keydown", e => {
+  if (!cur || cur.done || cur.guess === null || e.target.id === "eqn") return;
+  const i = +e.key - 1;
+  if (Number.isInteger(i) && i >= 0 && i < cur.spot.actions.length) act(i);
+});
 
 function tick() {
   const el = document.getElementById("timer");
@@ -83,9 +134,8 @@ function insight(i) {
   const place = below >= 0.5 ? `the top ${Math.max(1, Math.round((1 - below) * 100))}%` : `the bottom ${Math.max(1, Math.round(below * 100))}%`;
   const out = [`${info.cat}, with ${pct(info.eq)} equity. That's ${place} of your range here.`];
 
-  const bet = (spot.history.at(-1) || "").match(/bets ([\d.]+)bb/);
-  const need = bet ? +bet[1] / (spot.pot_bb + +bet[1]) : null;
-  if (need) out.push(`Calling ${bet[1]}bb into ${spot.pot_bb}bb needs ${pct(need)} equity.`);
+  const call = spot.to_call_bb, need = call ? call / (spot.pot_bb + call) : null;
+  if (need) out.push(`Calling ${call}bb into ${spot.pot_bb}bb needs ${pct(need)} equity.`);
 
   const a = acts[main], aggressive = /^(Bet|Raise|All-in)/.test(a);
   const verb = a.startsWith("Raise") || (a === "All-in" && need) ? "raising" : "betting";
@@ -121,12 +171,13 @@ function act(i) {
     time: (performance.now() - cur.t0) / 1000,
     match: f[i] / best, // full credit for any action the solver plays as often as its main line
     eqErr: Math.abs(cur.guess - cur.info.eq),
-    // kept for the hand-by-hand review
-    board: cur.flop.board, combo: cur.combo, you: cur.spot.actions[i],
+    // kept for the hand-by-hand review and the breakdown
+    board: cur.board, combo: cur.hole.join(""), you: cur.spot.actions[i],
     solver: cur.spot.actions[f.indexOf(best)], solverPct: best, eq: cur.info.eq, guess: cur.guess,
+    situation: cur.spot.situation, texture: cur.flop.texture,
   };
   results.push(r);
-  const last = results.length === HANDS;
+  const last = results.length === plan.length;
   app.querySelector(".panel").innerHTML = `
     <label>The solver plays this hand</label>
     <ul class="mix">${cur.spot.actions.map((a, j) => `
@@ -142,7 +193,7 @@ function act(i) {
     <button class="primary" id="next">${last ? "See my results" : "Next hand"}</button>`;
   const next = document.getElementById("next");
   next.addEventListener("click", last ? summary : deal);
-  next.focus();
+  next.focus(); // Enter goes on to the next hand
 }
 
 // Sessions live in this browser only (localStorage); the page works without them.
@@ -176,6 +227,24 @@ function review(hands) {
     </tbody></table></div>`;
 }
 
+// Average match and equity error per situation and per board texture, weakest first.
+function breakdown(hands) {
+  hands = hands.filter(h => h.situation);
+  if (!hands.length) return "";
+  const table = (key, title) => {
+    const groups = {};
+    for (const h of hands) (groups[h[key]] ||= []).push(h);
+    const rows = Object.entries(groups).map(([name, hs]) => ({
+      name, n: hs.length,
+      match: hs.reduce((s, h) => s + h.match, 0) / hs.length,
+      err: hs.reduce((s, h) => s + h.eqErr, 0) / hs.length,
+    })).sort((a, b) => a.match - b.match);
+    return `<table><thead><tr><th scope="col">${title}</th><th scope="col">Hands</th><th scope="col">Solver match</th><th scope="col">Equity error</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td>${r.name}</td><td>${r.n}</td><td>${pct(r.match)}</td><td>${Math.round(r.err * 100)} pts</td></tr>`).join("")}</tbody></table>`;
+  };
+  return `<div class="review breakdown">${table("situation", "Situation")}${table("texture", "Board")}</div>`;
+}
+
 // One sentence per score: how this session moved against the previous one.
 function compare(now, prev) {
   const pts = x => `${Math.abs(Math.round(x * 100))} points`;
@@ -199,36 +268,50 @@ function summary() {
   document.getElementById("progress").textContent = "Done";
   app.innerHTML = `
     <section class="result">
-      <h2>Your intuition over ${HANDS} hands</h2>
+      <h2>Your intuition over ${results.length} hands</h2>
       ${scores(session)}
       ${past.length ? `<p class="insight">${compare(session, past.at(-1))}</p>` : ""}
       <p>Solver match is 100% when you always pick a play the solver uses at least as often as its main line.
         Mixed spots give partial credit. Equity error is how far your estimates were from the true equity, on average.
         To understand the ideas behind these scores, read <a href="learn.html#equity">equity</a> and <a href="learn.html#solver">what a solver does</a>.</p>
+      <h3>Where you're strong and weak</h3>
+      ${results.length < 25 ? `<p class="muted">${results.length} hands is a small sample, so expect these numbers to swing between sessions.
+        The breakdown across all your sessions, on the start screen, is more reliable.</p>` : ""}
+      ${breakdown(results)}
       <h3>Hand by hand</h3>
       ${review(results)}
-      <div class="row"><button class="primary" id="again">Play another ${HANDS}</button><button id="home">See all sessions</button></div>
+      <div class="row"><button class="primary" id="again">Play another ${results.length}</button><button id="home">See all sessions</button></div>
     </section>`;
-  document.getElementById("again").addEventListener("click", start);
+  const n = results.length;
+  document.getElementById("again").addEventListener("click", () => start(n));
   document.getElementById("home").addEventListener("click", home);
 }
 
-function start() { results = []; deal(); }
+async function start(n) {
+  app.innerHTML = `<p class="situation">Dealing…</p>`;
+  results = [];
+  try { plan = await makePlan(n); } catch { return failed(); }
+  deal();
+}
 
 function home() {
   const list = loadSessions().reverse();
+  cur = null;
   document.getElementById("progress").textContent = "";
   const avg = k => list.reduce((s, x) => s + x[k], 0) / list.length;
   app.innerHTML = `
     <section class="result">
       <h2>How good are your poker instincts?</h2>
-      <p>You'll get ${HANDS} real flop decisions from a 100bb cash game. For each one, estimate your equity, then act before the clock runs out.
-        A solver grades every choice, and your sessions are saved in this browser so you can track your progress.</p>
-      <div class="row"><button class="primary" id="go">Start a ${HANDS}-hand session</button></div>
+      <p>You'll get real flop decisions from a 100bb cash game, dealt from ${index.flops.length} solved boards.
+        For each one, estimate your equity, then act before the clock runs out. A solver grades every choice,
+        and your sessions are saved in this browser so you can track your progress.</p>
+      <div class="row"><button class="primary" id="go">Start a 10-hand session</button><button id="go25">Play 25 hands</button></div>
       ${list.length ? `
         <h3>Your sessions</h3>
         <p class="muted">Average over ${list.length} session${list.length > 1 ? "s" : ""}</p>
         ${scores({ match: avg("match"), eqErr: avg("eqErr"), median: avg("median") })}
+        <h3>Where you're strong and weak, across all sessions</h3>
+        ${breakdown(list.flatMap(s => s.hands))}
         <ul class="sessions">${list.map(s => `
           <li><details><summary><span>${when(s.at)}</span><span>${pct(s.match)} match</span>
             <span>${Math.round(s.eqErr * 100)} pts off</span><span>${s.median.toFixed(1)}s</span></summary>
@@ -236,14 +319,18 @@ function home() {
         </ul>
         <button id="clear">Clear my history</button>` : ""}
     </section>`;
-  document.getElementById("go").addEventListener("click", start);
+  document.getElementById("go").addEventListener("click", () => start(10));
+  document.getElementById("go25").addEventListener("click", () => start(25));
   document.getElementById("clear")?.addEventListener("click", () => {
     if (confirm("Delete all saved sessions from this browser?")) { saveSessions([]); home(); }
   });
 }
 
-fetch("data/spots.json").then(r => r.json()).then(d => { data = d; home(); })
-  .catch(() => (app.innerHTML = `<p class="situation">Couldn't load data/spots.json. Serve this folder over HTTP, for example with <code>python -m http.server</code>.</p>`));
+function failed() {
+  app.innerHTML = `<p class="situation">Couldn't load the hand data. Serve this folder over HTTP, for example with <code>python -m http.server</code>, and reload.</p>`;
+}
+
+fetch("data/index.json").then(r => r.json()).then(d => { index = d; home(); }).catch(failed);
 </script>
 </body>
 </html>
